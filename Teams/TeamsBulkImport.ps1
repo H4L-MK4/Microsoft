@@ -1,0 +1,25 @@
+#---------------------------------------------------------------------------------------------------#
+#  Script: Teams Bulk Import & Single adjustments                                                   #
+#  Version 1.0                                                                                      #
+#  Description: This script will import a CSV of users and phonenumbers to Teams Admin Center.      #
+#  Some Single liner can be used to adjust settings individually.                                   #
+#                                                                                                   #
+#  CSV Input: IdentityName,PhoneNumber                                                              #
+#                                                                                                   #
+#---------------------------------------------------------------------------------------------------#
+
+# Connect to Teams
+Connect-MicrosoftTeams
+
+# Bulk Import
+$teams = Import-Csv "C:\path\to\doc\teamslist.csv"
+$policyname = "YourPolicyNameHere"
+
+foreach ($team in $teams) {
+    Set-CsPhoneNumberAssignment -Identity $team.IdentityName -PhoneNumber $team.PhoneNumber -PhoneNumberType DirectRouting
+    Grant-CsOnlineVoiceRoutingPolicy -PolicyName $policyname -Identity $team.IdentityName
+}
+
+#Single User or Resource Account
+Set-CsPhoneNumberAssignment -Identity user.name@domain.com -PhoneNumber +41XXXXXXXXX -PhoneNumberType DirectRouting
+Grant-CsOnlineVoiceRoutingPolicy -Identity user.name@domain.com -PolicyName "<PolicyName>"
