@@ -2,7 +2,7 @@
 .SYNOPSIS
   Prompts for a user’s e-mail and PreferredDataLocation (CHE, IND, USA), then updates via Microsoft Graph.
 .DESCRIPTION
-  1) Creates C:\CLS\Logs if missing and logs every step to a timestamped file.
+  1) Creates C:\Logs if missing and logs every step to a timestamped file.
   2) Relaunches itself elevated if needed (UAC).
   3) Ensures only necessary Graph modules are installed/imported.
   4) Prompts via GUI InputBoxes for e-mail and PDL.
