@@ -1,3 +1,5 @@
+# Script provided by @Karlmit
+
 # --- Make sure Powershell is running in 64 bit mode ----
 Param([switch]$Is64Bit = $false)
 
@@ -30,11 +32,6 @@ $offboardCmdPath = Join-Path -Path $PSScriptRoot -ChildPath $offboardCmdScriptNa
 $onboardCmdScriptName = "NAMEOFONBOARDCMD.cmd" # Onboarding script
 $onboardCmdPath = Join-Path -Path $PSScriptRoot -ChildPath $onboardCmdScriptName
 
-# Name of your SharePoint Logger script (ensure this is in the same folder as this PS1 script)
-# Removed this part since it requires complicated app registration.
-#$sharePointLoggerScriptName = "SharePointLogger.ps1"
-#$sharePointLoggerPath = Join-Path -Path $PSScriptRoot -ChildPath $sharePointLoggerScriptName
-
 # --- Script Execution ---
 try {
     # 1. Create Log Directory if it doesn't exist
@@ -63,19 +60,6 @@ try {
     Write-Host "PSScriptRoot resolved to: $PSScriptRoot"
     Write-Host "Offboarding CMD script path: $offboardCmdPath"
     Write-Host "Onboarding CMD script path: $onboardCmdPath"
-    #Write-Host "SharePoint Logger script path: $sharePointLoggerPath"
-
-    # Removed this part since this is not needed for the on-off board
-    ## 3. Dot-source SharePoint Logger (Your existing code for this) 
-    #if (Test-Path -Path $sharePointLoggerPath) {
-    #    try {
-    #        . $sharePointLoggerPath 
-    #        Write-Host "Successfully dot-sourced SharePointLogger.ps1"
-    #        # Example: Log-ToSharePoint -Message "Defender offboarding/onboarding script started on $(hostname)." -Status "Information" 
-    #    }
-    #    catch { Write-Warning "Failed to dot-source SharePointLogger.ps1. Error: $($_.Exception.Message)" }
-    #}
-    #else { Write-Warning "SharePointLogger.ps1 not found. SharePoint logging skipped." }
 
     # 4. Defender Org ID Detection (Your existing code for this)
     $currentOrgId = $null
@@ -113,20 +97,16 @@ try {
                 if ($process.ExitCode -eq 0) {
                     Write-Host "Offboarding CMD script executed successfully. Exit Code: $($process.ExitCode)"
                     $offboardingAttemptedAndSucceeded = $true # <-- SET FLAG HERE
-                    # Example: Log-ToSharePoint -Message "Offboarding from $oldOrgIdToOffboard SUCCEEDED." -Status "Success"
                 } else {
                     Write-Warning "Offboarding CMD script completed with non-zero Exit Code: $($process.ExitCode)."
-                    # Example: Log-ToSharePoint -Message "Offboarding from $oldOrgIdToOffboard FAILED. Exit Code: $($process.ExitCode)." -Status "Error"
                 }
             }
             catch {
                 Write-Error "PowerShell error executing offboarding CMD '$offboardCmdPath'. Error: $($_.Exception.Message)"
-                # Example: Log-ToSharePoint -Message "PowerShell error executing offboarding CMD: $($_.Exception.Message)" -Status "Error"
             }
         }
         else {
             Write-Error "Offboarding CMD script not found at: $offboardCmdPath."
-            # Example: Log-ToSharePoint -Message "Offboarding CMD script NOT FOUND at $offboardCmdPath." -Status "Error"
         }
     }
     else {
@@ -136,7 +116,6 @@ try {
     # 6. Execute Onboarding CMD if Offboarding was successful
     if ($offboardingAttemptedAndSucceeded) { # Only true if $offboardNeeded was true AND $process.ExitCode was 0
         Write-Host "Offboarding successful. Attempting to run Defender Onboarding Script: $onboardCmdPath"
-        # Example: Log-ToSharePoint -Message "Attempting onboarding to new tenant." -Status "Information"
         if (Test-Path -Path $onboardCmdPath) {
             try {
                 # It's good practice to wait a few seconds after offboarding before starting onboarding
@@ -146,24 +125,19 @@ try {
                 $onboardProcess = Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$onboardCmdPath`"" -Wait -PassThru -WindowStyle Hidden -ErrorAction Stop
                 if ($onboardProcess.ExitCode -eq 0) {
                     Write-Host "Onboarding CMD script executed successfully. Exit Code: $($onboardProcess.ExitCode)"
-                    # Example: Log-ToSharePoint -Message "Onboarding CMD script SUCCEEDED." -Status "Success"
                 } else {
                     Write-Warning "Onboarding CMD script completed with non-zero Exit Code: $($onboardProcess.ExitCode)."
-                    # Example: Log-ToSharePoint -Message "Onboarding CMD script FAILED. Exit Code: $($onboardProcess.ExitCode)." -Status "Error"
                 }
             }
             catch {
                 Write-Error "PowerShell error executing onboarding CMD '$onboardCmdPath'. Error: $($_.Exception.Message)"
-                # Example: Log-ToSharePoint -Message "PowerShell error executing onboarding CMD: $($_.Exception.Message)" -Status "Error"
             }
         }
         else {
             Write-Error "Onboarding CMD script not found at: $onboardCmdPath."
-            # Example: Log-ToSharePoint -Message "Onboarding CMD script NOT FOUND at $onboardCmdPath." -Status "Error"
         }
     } elseif ($offboardNeeded -and (-not $offboardingAttemptedAndSucceeded)) {
         Write-Warning "Onboarding will not be attempted because the preceding offboarding operation did not succeed."
-        # Example: Log-ToSharePoint -Message "Onboarding skipped because offboarding from old tenant failed or was not executed." -Status "Warning"
     }
 
 
@@ -196,6 +170,5 @@ finally {
         # This catch is for Stop-Transcript itself failing.
         Write-Warning "Error stopping transcript: $($_.Exception.Message)"
     }
-    #Upload-SPLogFile -FolderPath "Defender Offboard\$($env:COMPUTERNAME)" -LocalFilePath "$logFilePath"
 }
 # End of script
