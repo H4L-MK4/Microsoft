@@ -1,17 +1,22 @@
 ﻿<#
 .SYNOPSIS
-  Prompts for a user’s e-mail and PreferredDataLocation (CHE, IND, USA), then updates via Microsoft Graph.
+Sets the PreferredDataLocation for a user in Microsoft 365
+
 .DESCRIPTION
-  1) Creates C:\Logs if missing and logs every step to a timestamped file.
-  2) Relaunches itself elevated if needed (UAC).
-  3) Ensures only necessary Graph modules are installed/imported.
-  4) Prompts via GUI InputBoxes for e-mail and PDL.
-  5) Connects to Graph, updates the user, then renames the log to include the e-mail and opens Explorer.
+This PowerShell GUI tool uses Microsoft Graph to update a user’s PreferredDataLocation.
+Supports UAC elevation, logging, and GUI-based input.
+
+.AUTHOR
+H4L-MK4
+
+.VERSION
+1.1
+
 #>
 
 # --- CONFIGURATION & LOG SETUP ---
 $ErrorActionPreference = 'Stop'
-$logDir       = 'C:\Logs'
+$logDir       = 'C:\LOGS'
 $timestamp    = Get-Date -Format 'yyyyMMdd_HHmmss'
 
 # Ensure log directory exists
