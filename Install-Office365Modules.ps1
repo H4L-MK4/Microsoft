@@ -1,11 +1,21 @@
-# Office 365 PowerShell Modules Installer
-# Version 1.1 - Simplified and Robust
+﻿<#
+.SYNOPSIS
+Office 365 PowerShell Modules Installer
 
-# Strict mode and error handling
+.DESCRIPTION
+This script installs and updates the Office 365 PowerShell modules. You can also connect to the services.
+
+.AUTHOR
+H4L-MK4
+
+.VERSION
+1.1 - Removed comments and simplified the script
+
+#>
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# Admin Privileges Check
 if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
     Write-Warning "This script requires Administrator privileges. Please re-run PowerShell as Administrator."
     Write-Host "Press any key to exit..."
@@ -13,7 +23,6 @@ if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
     exit 1
 }
 
-# Execution Policy Check
 $currentPolicy = Get-ExecutionPolicy
 if ($currentPolicy -eq "Restricted" -or $currentPolicy -eq "AllSigned") {
     Write-Host "Temporarily setting ExecutionPolicy to RemoteSigned for this session..." -ForegroundColor Yellow
@@ -27,10 +36,8 @@ if ($currentPolicy -eq "Restricted" -or $currentPolicy -eq "AllSigned") {
     }
 }
 
-# Global tracker for connection attempts
 $Global:AttemptedConnections = @{}
 
-# Module Definitions
 $modules = @(
     @{ Name = "Microsoft.Graph"; Description = "Microsoft Graph SDK"; ConnectCmdletString = "Connect-MgGraph" },
     @{ Name = "ExchangeOnlineManagement"; Description = "Exchange Online Management"; ConnectCmdletString = "Connect-ExchangeOnline" },
@@ -43,8 +50,6 @@ $modules = @(
     @{ Name = "Az.Accounts"; Description = "Azure Core Accounts"; ConnectCmdletString = "Connect-AzAccount" },
     @{ Name = "PnP.PowerShell"; Description = "PnP PowerShell (SharePoint/Teams)"; ConnectCmdletString = "Connect-PnPOnline" }
 )
-
-# Function to Display Menu
 function Show-Menu {
     Clear-Host
     Write-Host "==================================================" -ForegroundColor Cyan
@@ -75,8 +80,6 @@ function Show-Menu {
     Write-Host "[Q] Quit" -ForegroundColor Red
     Write-Host
 }
-
-# Function to Install/Update a Module
 function Manage-Module {
     param (
         [string]$ModuleName,
@@ -98,12 +101,10 @@ function Manage-Module {
     }
     Start-Sleep -Milliseconds 250
 }
-
-# Function to Display Connect Services Menu
 function Show-ConnectServicesMenu {
     param (
         [parameter(Mandatory=$true)]
-        [System.Collections.IList]$ConnectableModules # Accept the pre-filtered list
+        [System.Collections.IList]$ConnectableModules 
     )
     Clear-Host
     Write-Host "==================================================" -ForegroundColor DarkCyan
@@ -112,7 +113,6 @@ function Show-ConnectServicesMenu {
     Write-Host
 
     $menuIndex = 1
-    # Iterate over the passed-in list
     foreach ($moduleItem in $ConnectableModules) {
         $status = "[Not Attempted]"
         $color = "White"
@@ -132,8 +132,6 @@ function Show-ConnectServicesMenu {
     Write-Host "[B] Back to Main Menu" -ForegroundColor Yellow
     Write-Host
 }
-
-# Function to Invoke Module Connection
 function Invoke-ModuleConnect {
     param (
         [parameter(Mandatory=$true)]
@@ -145,7 +143,6 @@ function Invoke-ModuleConnect {
     $success = $false
 
     try {
-        # Special handling for cmdlets requiring user input
         if ($ModuleToConnect.Name -eq "Microsoft.Online.SharePoint.PowerShell") {
             $spAdminUrl = Read-Host -Prompt "Enter SharePoint Admin Center URL (e.g., https://yourtenant-admin.sharepoint.com)"
             if (-not [string]::IsNullOrWhiteSpace($spAdminUrl)) {
@@ -158,7 +155,6 @@ function Invoke-ModuleConnect {
         } elseif ($ModuleToConnect.Name -eq "PnP.PowerShell") {
             $pnpSiteUrl = Read-Host -Prompt "Enter SharePoint Site URL for PnP Connection (e.g., https://yourtenant.sharepoint.com/sites/your-site)"
             if (-not [string]::IsNullOrWhiteSpace($pnpSiteUrl)) {
-                # PnP PowerShell often works best with interactive login for MFA
                 $connectCommand = "Connect-PnPOnline -Url '$pnpSiteUrl' -Interactive"
                 Invoke-Expression $connectCommand
                 $success = $true
@@ -166,9 +162,8 @@ function Invoke-ModuleConnect {
                 Write-Warning "PnP Site URL not provided. Skipping connection."
             }
         } else {
-            # For other cmdlets, invoke directly
             Invoke-Expression $connectCommand
-            $success = $true # Assume success if no script-terminating error
+            $success = $true 
         }
 
         if ($success) {
@@ -179,10 +174,9 @@ function Invoke-ModuleConnect {
         Write-Error ("Failed to connect to '{0}'. Error: $($_.Exception.Message)" -f $ModuleToConnect.Description)
         $Global:AttemptedConnections[$ModuleToConnect.Name] = @{ Success = $false; Timestamp = Get-Date; ErrorMessage = $_.Exception.Message }
     }
-    Start-Sleep -Milliseconds 100 # Give a moment for any async operations or UI updates
+    Start-Sleep -Milliseconds 100 
 }
 
-# --- Main Script Logic ---
 do {
     Show-Menu
     $userInput = Read-Host -Prompt "Enter your choice"
@@ -206,24 +200,18 @@ do {
             }
             Write-Host "Update process completed." -ForegroundColor Blue
         }
-        "C" { # Connect to Services
-            # Filter for modules that have a non-null, non-empty, non-whitespace ConnectCmdletString
+        "C" {
             [array]$connectableModulesList = $modules | Where-Object { 
-                ($_.ConnectCmdletString -ne $null) -and      # Value is not $null (implicitly checks key existence)
-                ($_.ConnectCmdletString -is [string]) -and  # Value is a string
-                ($_.ConnectCmdletString.Trim().Length -gt 0) # Trimmed string has length > 0
+                ($_.ConnectCmdletString -ne $null) -and
+                ($_.ConnectCmdletString -is [string]) -and
+                ($_.ConnectCmdletString.Trim().Length -gt 0)
             }
-            
-            # Output the count of connectable modules for debugging
-            # Write-Host "DEBUG: Found $($connectableModulesList.Count) connectable modules." -ForegroundColor Magenta
-
             if (-not $connectableModulesList) { 
                 Write-Warning "No modules are currently configured with a valid Connect command. Please check the script's module definitions."
                 Write-Host "Press any key to return to the main menu..."
                 $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
             } else {
-                # Write-Host "DEBUG: Proceeding to Show-ConnectServicesMenu with $($connectableModulesList.Count) items." -ForegroundColor Cyan
-                do {
+                                do {
                     Show-ConnectServicesMenu -ConnectableModules $connectableModulesList
                     $connectInput = Read-Host -Prompt "Select service to connect to, or [B] for back"
                     if ($connectInput.ToUpper() -eq 'B') { break }
@@ -245,7 +233,7 @@ do {
                 } while ($true)
             }
         }
-        "S" { # Handled by Show-Menu in the loop
+        "S" { 
             Write-Host "Refreshing status..." -ForegroundColor Cyan 
         }
         "Q" {
@@ -272,7 +260,7 @@ do {
         }
     }
 
-    if ($userInput.ToUpper() -ne "Q" -and $userInput.ToUpper() -ne "C") { # Avoid double key press after connect menu
+    if ($userInput.ToUpper() -ne "Q" -and $userInput.ToUpper() -ne "C") { 
         Write-Host "Press any key to return to the menu..."
         $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
     }
