@@ -3,266 +3,453 @@
 Office 365 PowerShell Modules Installer
 
 .DESCRIPTION
-This script installs and updates the Office 365 PowerShell modules. You can also connect to the services.
+Installs/updates Office 365 PowerShell modules, shows status, and opens an interactive browser sign-in for each service.
 
 .AUTHOR
 H4L-MK4
 
 .VERSION
-1.1 - Removed comments and simplified the script
+1.2 – updated design and layout
 
 #>
 
-Set-StrictMode -Version Latest
-$ErrorActionPreference = "Stop"
+$esc = [char]27
+$KULLColors = @{
+    Reset         = "$esc[0m"
+    Border        = "$esc[38;2;160;160;160m" # KULL's gray: #A0A0A0
+    Title         = "$esc[38;2;255;199;153m" # KULL's bright yellow: #FFC799
+    Header        = "$esc[38;2;230;185;157m" # KULL's yellow: #E6B99D
+    Success       = "$esc[38;2;53;223;177m"  # KULL's bright green: #35DFB1
+    Failure       = "$esc[38;2;255;128;128m" # KULL's bright red: #FF8080
+    Warning       = "$esc[38;2;255;199;153m" # KULL's bright yellow: #FFC799
+    Text          = "$esc[38;2;255;255;255m" # KULL's foreground: #FFFFFF
+    Muted         = "$esc[38;2;160;160;160m" # KULL's gray: #A0A0A0
+    Connected     = "$esc[38;2;53;223;177m"  # Green for connected status
+    FailedConnect = "$esc[38;2;255;128;128m" # Red for failed status
+    MenuKey       = "$esc[38;2;255;199;153m" # KULL's bright yellow: #FFC799
+    MenuText      = "$esc[38;2;153;255;228m" # KULL's cyan: #99FFE4
+    Version       = "$esc[38;2;255;199;153m" # KULL's bright yellow: #FFC799
+}
 
-if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-    Write-Warning "This script requires Administrator privileges. Please re-run PowerShell as Administrator."
-    Write-Host "Press any key to exit..."
-    $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+function Write-Centered {
+    param(
+        [string]$Text,
+        [int]$Width = [Console]::WindowWidth
+    )
+    $visibleText = $Text -replace "$esc\[[0-9;]*m"
+    $paddingLength = [math]::Max(0, [math]::Floor(($Width - $visibleText.Length) / 2))
+    $padding = ' ' * $paddingLength
+    
+    Write-Host "$padding$Text"
+}
+
+function Show-Header {
+    $width = [Console]::WindowWidth
+    $border = '═' * $width
+    Write-Host "$($KULLColors.Border)$border$($KULLColors.Reset)"
+    Write-Centered "$($KULLColors.Title)Office 365 PowerShell Module Installer$($KULLColors.Reset)"
+    Write-Host "$($KULLColors.Border)$border$($KULLColors.Reset)"
+}
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()
+     ).IsInRole([Security.Principal.WindowsBuiltInRole] 'Administrator')) {
+    Write-Warning 'This script requires Administrator privileges. Please re-run PowerShell as Administrator.'
     exit 1
 }
 
-$currentPolicy = Get-ExecutionPolicy
-if ($currentPolicy -eq "Restricted" -or $currentPolicy -eq "AllSigned") {
-    Write-Host "Temporarily setting ExecutionPolicy to RemoteSigned for this session..." -ForegroundColor Yellow
-    try {
-        Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process -Force -ErrorAction Stop
-    } catch {
-        Write-Error "Failed to set ExecutionPolicy. Please manually run: Set-ExecutionPolicy RemoteSigned -Scope Process -Force"
-        Write-Host "Press any key to exit..."
-        $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-        exit 1
-    }
-}
-
-$Global:AttemptedConnections = @{}
-
 $modules = @(
-    @{ Name = "Microsoft.Graph"; Description = "Microsoft Graph SDK"; ConnectCmdletString = "Connect-MgGraph" },
-    @{ Name = "ExchangeOnlineManagement"; Description = "Exchange Online Management"; ConnectCmdletString = "Connect-ExchangeOnline" },
-    @{ Name = "Microsoft.Online.SharePoint.PowerShell"; Description = "SharePoint Online Management"; ConnectCmdletString = "Connect-SPOService" },
-    @{ Name = "MicrosoftTeams"; Description = "Microsoft Teams"; ConnectCmdletString = "Connect-MicrosoftTeams" },
-    @{ Name = "AzureAD"; Description = "Azure Active Directory (Legacy)"; ConnectCmdletString = "Connect-AzureAD" },
-    @{ Name = "MSOnline"; Description = "MSOnline (Legacy for MFA/Licensing)"; ConnectCmdletString = "Connect-MsolService" },
-    @{ Name = "Microsoft.PowerApps.Administration.PowerShell"; Description = "Power Platform Administration"; ConnectCmdletString = "Add-PowerAppsAccount -Endpoint admin" },
-    @{ Name = "Microsoft.PowerApps.PowerShell"; Description = "Power Apps Maker"; ConnectCmdletString = "Add-PowerAppsAccount" },
-    @{ Name = "Az.Accounts"; Description = "Azure Core Accounts"; ConnectCmdletString = "Connect-AzAccount" },
-    @{ Name = "PnP.PowerShell"; Description = "PnP PowerShell (SharePoint/Teams)"; ConnectCmdletString = "Connect-PnPOnline" }
+    @{ Name = 'Microsoft.Graph';                          Description = 'Microsoft Graph SDK';          ConnectCmdletString = 'Connect-MgGraph' },
+    @{ Name = 'ExchangeOnlineManagement';                  Description = 'Exchange Online Management';  ConnectCmdletString = 'Connect-ExchangeOnline' },
+    @{ Name = 'Microsoft.Online.SharePoint.PowerShell';     Description = 'SharePoint Online Mgmt';      ConnectCmdletString = 'Connect-SPOService' },
+    @{ Name = 'MicrosoftTeams';                            Description = 'Microsoft Teams';            ConnectCmdletString = 'Connect-MicrosoftTeams' },
+    @{ Name = 'AzureAD';                                    Description = 'Azure AD (Legacy)';          ConnectCmdletString = 'Connect-AzureAD' },
+    @{ Name = 'MSOnline';                                  Description = 'MSOnline (Legacy)';          ConnectCmdletString = 'Connect-MsolService' },
+    @{ Name = 'Microsoft.PowerApps.Administration.PowerShell'; Description = 'Power Apps Admin';       ConnectCmdletString = 'Add-PowerAppsAccount -Endpoint admin' },
+    @{ Name = 'Microsoft.PowerApps.PowerShell';            Description = 'Power Apps Maker';           ConnectCmdletString = 'Add-PowerAppsAccount' },
+    @{ Name = 'Az.Accounts';                               Description = 'Azure Core Accounts';        ConnectCmdletString = 'Connect-AzAccount' },
+    @{ Name = 'PnP.PowerShell';                            Description = 'PnP PowerShell';             ConnectCmdletString = 'Connect-PnPOnline' }
 )
-function Show-Menu {
-    Clear-Host
-    Write-Host "==================================================" -ForegroundColor Cyan
-    Write-Host "   Office 365 PowerShell Module Installer " -ForegroundColor Cyan
-    Write-Host "==================================================" -ForegroundColor Cyan
-    Write-Host
 
-    for ($i = 0; $i -lt $modules.Count; $i++) {
-        $moduleItem = $modules[$i]
-        $foundModules = Get-Module -ListAvailable -Name $moduleItem.Name -ErrorAction SilentlyContinue
+function Show-ModuleStatus {
+    $headerColor = $KULLColors.Header
+    $versionColor = $KULLColors.Version
+    $reset = $KULLColors.Reset
+
+    $statusData = $modules | ForEach-Object {
+        $name = $_.Name
+        $mod  = Get-Module -ListAvailable -Name $name -ErrorAction SilentlyContinue |
+                Sort-Object Version -Descending | Select-Object -First 1
         
-        if ($foundModules) {
-            $latestVersion = ($foundModules | Sort-Object -Property Version -Descending | Select-Object -First 1).Version
-            $statusText = "[INSTALLED - v$latestVersion]"
-            $lineColor = "Green"
-        } else {
-            $statusText = "[NOT INSTALLED]"
-            $lineColor = "White"
+        [PSCustomObject]@{
+            Module    = $name
+            Installed = if ($mod) { 'Yes' } else { 'No' }
+            Version   = if ($mod) { $mod.Version.ToString() } else { '-' }
         }
-        Write-Host ("{0,2}. {1,-45} {2}" -f ($i + 1), $moduleItem.Description, $statusText) -ForegroundColor $lineColor
     }
 
-    Write-Host
-    Write-Host "[A] Install ALL Not Installed Modules" -ForegroundColor Magenta
-    Write-Host "[U] Update ALL Installed Modules" -ForegroundColor Blue
-    Write-Host "[C] Connect to Services" -ForegroundColor Yellow
-    Write-Host "[S] Show Installation Status (Refresh)" -ForegroundColor Cyan
-    Write-Host "[Q] Quit" -ForegroundColor Red
-    Write-Host
+    $maxModuleLen = ($statusData.Module | ForEach-Object { $_.Length } | Measure-Object -Maximum).Maximum
+    $maxInstalledLen = ($statusData.Installed | ForEach-Object { $_.Length } | Measure-Object -Maximum).Maximum
+    $maxModuleLen = [math]::Max($maxModuleLen, 'Module'.Length)
+    $maxInstalledLen = [math]::Max($maxInstalledLen, 'Installed'.Length)
+
+    $header = "{0,-$maxModuleLen}  {1,-$maxInstalledLen}  {2}" -f 'Module', 'Installed', 'Version'
+    Write-Host "`n$headerColor$header$reset"
+    $separator = "{0}  {1}  {2}" -f ('-' * $maxModuleLen), ('-' * $maxInstalledLen), ('-' * 'Version'.Length)
+    Write-Host "$headerColor$separator$reset"
+
+    foreach ($item in $statusData) {
+        $versionText = if ($item.Version -ne '-') { "$versionColor$($item.Version)$reset" } else { '-' }
+        $line = "{0,-$maxModuleLen}  {1,-$maxInstalledLen}  {2}" -f $item.Module, $item.Installed, $versionText
+        Write-Host $line
+    }
+    Write-Host ''
 }
+
 function Manage-Module {
     param (
-        [string]$ModuleName,
-        [string]$Action = "Install"
+        [Parameter(Mandatory)] [string] $ModuleName,
+        [Parameter(Mandatory)][ValidateSet('Install', 'Update', 'Uninstall')] [string] $Action
     )
+    $actionVerbs = @{
+        Install   = @{ Present = 'Installing'; Past = 'installed' }
+        Update    = @{ Present = 'Updating';   Past = 'updated' }
+        Uninstall = @{ Present = 'Uninstalling'; Past = 'uninstalled' }
+    }
+    $presentVerb = $actionVerbs[$Action].Present
+    $pastVerb = $actionVerbs[$Action].Past
 
-    $actionVerb = if ($Action -eq "Install") { "Installing" } else { "Updating" }
-    Write-Host "$actionVerb module '$ModuleName'..." -ForegroundColor Yellow
-    
+    Write-Centered "$($KULLColors.Warning)$presentVerb module '$ModuleName'...$($KULLColors.Reset)"
     try {
-        if ($Action -eq "Install") {
-            Install-Module -Name $ModuleName -Force -AllowClobber -Scope CurrentUser -ErrorAction Stop
-        } elseif ($Action -eq "Update") {
-            Update-Module -Name $ModuleName -Force -Scope CurrentUser -ErrorAction Stop
+        switch ($Action) {
+            'Install'   { Install-Module -Name $ModuleName -Force -AllowClobber -Scope CurrentUser -ErrorAction Stop }
+            'Update'    { Update-Module -Name $ModuleName -Force -Scope CurrentUser -ErrorAction Stop }
+            'Uninstall' { Uninstall-Module -Name $ModuleName -Force -ErrorAction Stop }
         }
-        Write-Host "Successfully $($actionVerb.ToLower() -replace 'ing$', 'ed') '$ModuleName'." -ForegroundColor Green
+        Write-Centered "$($KULLColors.Success)Successfully $pastVerb '$ModuleName'.$($KULLColors.Reset)"
     } catch {
-        Write-Error "Failed to $($Action.ToLower()) module '$ModuleName'. Error: $($_.Exception.Message)"
+        $errorMessage = "Failed to $($Action.ToLower()) '$ModuleName': $($_.Exception.Message)"
+        Write-Centered "$($KULLColors.Failure)$errorMessage$($KULLColors.Reset)"
     }
-    Start-Sleep -Milliseconds 250
 }
-function Show-ConnectServicesMenu {
-    param (
-        [parameter(Mandatory=$true)]
-        [System.Collections.IList]$ConnectableModules 
-    )
+
+function Show-Menu {
     Clear-Host
-    Write-Host "==================================================" -ForegroundColor DarkCyan
-    Write-Host "           Connect to Office 365 Services" -ForegroundColor DarkCyan
-    Write-Host "==================================================" -ForegroundColor DarkCyan
+    Show-Header
     Write-Host
+    $keyColor = $KULLColors.MenuKey
+    $textColor = $KULLColors.MenuText
+    $reset = $KULLColors.Reset
 
-    $menuIndex = 1
-    foreach ($moduleItem in $ConnectableModules) {
-        $status = "[Not Attempted]"
-        $color = "White"
-        if ($Global:AttemptedConnections.ContainsKey($moduleItem.Name)) {
-            if ($Global:AttemptedConnections[$moduleItem.Name].Success) {
-                $status = "[CONNECTED]"
-                $color = "Green"
-            } else {
-                $status = "[ATTEMPT FAILED]"
-                $color = "Red"
-            }
-        }
-        Write-Host ("{0,2}. Connect to {1,-35} {2}" -f $menuIndex, $moduleItem.Description, $status) -ForegroundColor $color
-        $menuIndex++
-    }
-    Write-Host
-    Write-Host "[B] Back to Main Menu" -ForegroundColor Yellow
+    Write-Centered "${keyColor}S)$reset $textColor Show module status$reset"
+    Write-Centered "${keyColor}I)$reset $textColor Install missing module(s)$reset"
+    Write-Centered "${keyColor}U)$reset $textColor Update installed module(s)$reset"
+    Write-Centered "${keyColor}X)$reset $textColor Uninstall installed module(s)$reset"
+    Write-Centered "${keyColor}C)$reset $textColor Connect to a service$reset"
+    Write-Centered "${keyColor}Q)$reset $textColor Quit$reset"
     Write-Host
 }
-function Invoke-ModuleConnect {
-    param (
-        [parameter(Mandatory=$true)]
-        [hashtable]$ModuleToConnect
-    )
 
-    Write-Host ("Attempting to connect to '{0}'..." -f $ModuleToConnect.Description) -ForegroundColor Yellow
-    $connectCommand = $ModuleToConnect.ConnectCmdletString
+function Invoke-ModuleConnect {
+    param ([hashtable] $ModuleToConnect)
+
+    Write-Centered "$($KULLColors.Warning)Connecting to '$($ModuleToConnect.Description)'...$($KULLColors.Reset)"
     $success = $false
 
     try {
-        if ($ModuleToConnect.Name -eq "Microsoft.Online.SharePoint.PowerShell") {
-            $spAdminUrl = Read-Host -Prompt "Enter SharePoint Admin Center URL (e.g., https://yourtenant-admin.sharepoint.com)"
-            if (-not [string]::IsNullOrWhiteSpace($spAdminUrl)) {
-                $connectCommand = "Connect-SPOService -Url '$spAdminUrl'"
-                Invoke-Expression $connectCommand
-                $success = $true
-            } else {
-                Write-Warning "SharePoint Admin URL not provided. Skipping connection."
+        switch ($ModuleToConnect.Name) {
+            'Microsoft.Online.SharePoint.PowerShell' {
+                $url = Read-Host 'Enter SharePoint Admin Center URL'
+                if ($url) {
+                    Connect-SPOService -Url $url -ErrorAction Stop
+                    $success = $true
+                }
             }
-        } elseif ($ModuleToConnect.Name -eq "PnP.PowerShell") {
-            $pnpSiteUrl = Read-Host -Prompt "Enter SharePoint Site URL for PnP Connection (e.g., https://yourtenant.sharepoint.com/sites/your-site)"
-            if (-not [string]::IsNullOrWhiteSpace($pnpSiteUrl)) {
-                $connectCommand = "Connect-PnPOnline -Url '$pnpSiteUrl' -Interactive"
-                Invoke-Expression $connectCommand
-                $success = $true
-            } else {
-                Write-Warning "PnP Site URL not provided. Skipping connection."
+            'PnP.PowerShell' {
+                $url = Read-Host 'Enter site URL for PnP connection'
+                if ($url) {
+                    Connect-PnPOnline -Url $url -Interactive -ErrorAction Stop
+                    $success = $true
+                }
             }
-        } else {
-            Invoke-Expression $connectCommand
-            $success = $true 
+            'ExchangeOnlineManagement' {
+                Write-Host 'Opening browser for interactive sign-in…' -ForegroundColor Yellow
+                Connect-ExchangeOnline -ShowProgress $true -ErrorAction Stop
+                $success = $true
+            }
+            default {
+                Invoke-Expression $ModuleToConnect.ConnectCmdletString
+                $success = $true
+            }
         }
-
         if ($success) {
-            Write-Host ("Successfully initiated connection to '{0}'." -f $ModuleToConnect.Description) -ForegroundColor Green
-            $Global:AttemptedConnections[$ModuleToConnect.Name] = @{ Success = $true; Timestamp = Get-Date }
+            Write-Centered "$($KULLColors.Success)Connected to '$($ModuleToConnect.Description)'.$($KULLColors.Reset)"
+            $Global:AttemptedConnections[$ModuleToConnect.Name] = @{ Success = $true; Time = Get-Date }
+        } else {
+            Write-Centered "$($KULLColors.Muted)Connection skipped (no input provided).$($KULLColors.Reset)"
         }
     } catch {
-        Write-Error ("Failed to connect to '{0}'. Error: $($_.Exception.Message)" -f $ModuleToConnect.Description)
-        $Global:AttemptedConnections[$ModuleToConnect.Name] = @{ Success = $false; Timestamp = Get-Date; ErrorMessage = $_.Exception.Message }
+        $errorMessage = "Failed to connect to '$($ModuleToConnect.Description)': $($_.Exception.Message)"
+        Write-Centered "$($KULLColors.Failure)$errorMessage$($KULLColors.Reset)"
+        $Global:AttemptedConnections[$ModuleToConnect.Name] = @{ Success = $false; Time = Get-Date; Error = $_.Exception.Message }
     }
-    Start-Sleep -Milliseconds 100 
+    Start-Sleep -Milliseconds 100
 }
+
+# Main loop
+$Global:AttemptedConnections = @{}
+$exitLoop = $false
 
 do {
     Show-Menu
-    $userInput = Read-Host -Prompt "Enter your choice"
+    $choice = Read-Host "$($KULLColors.Muted)Enter choice:$($KULLColors.Reset)"
 
-    switch ($userInput.ToUpper()) {
-        "A" {
-            Write-Host "Installing all not installed modules..." -ForegroundColor Magenta
-            foreach ($moduleEntry in $modules) {
-                if (-not (Get-Module -ListAvailable -Name $moduleEntry.Name -ErrorAction SilentlyContinue)) {
-                    Manage-Module -ModuleName $moduleEntry.Name -Action "Install"
-                }
-            }
-            Write-Host "Installation process completed." -ForegroundColor Magenta
+    switch ($choice.ToUpper()) {
+        'S' {
+            Clear-Host
+            Show-Header
+            Show-ModuleStatus
+            Write-Centered "$($KULLColors.Muted)Press any key to return...$($KULLColors.Reset)"
+            [void][System.Console]::ReadKey($true)
         }
-        "U" {
-            Write-Host "Updating all installed modules..." -ForegroundColor Blue
-            foreach ($moduleEntry in $modules) {
-                if (Get-Module -ListAvailable -Name $moduleEntry.Name -ErrorAction SilentlyContinue) {
-                    Manage-Module -ModuleName $moduleEntry.Name -Action "Update"
+        'I' {
+            [array]$missingModules = $modules | Where-Object { -not (Get-Module -ListAvailable -Name $_.Name -ErrorAction SilentlyContinue) }
+            if ($missingModules.Count -eq 0) {
+                Clear-Host
+                Show-Header
+                Write-Centered "$($KULLColors.Success)All modules are already installed.$($KULLColors.Reset)"; Start-Sleep 2
+                continue
+            }
+            
+            do {
+                Clear-Host
+                Show-Header
+                Write-Host
+                Write-Centered "$($KULLColors.Header)--- Install Modules ---$($KULLColors.Reset)"
+                Write-Host
+                $keyColor = $KULLColors.MenuKey
+                $textColor = $KULLColors.MenuText
+                $reset = $KULLColors.Reset
+                for ($i = 0; $i -lt $missingModules.Count; $i++) {
+                    Write-Centered "${keyColor}$($i + 1))$reset $textColor Install $($missingModules[$i].Description)$reset"
                 }
-            }
-            Write-Host "Update process completed." -ForegroundColor Blue
-        }
-        "C" {
-            [array]$connectableModulesList = $modules | Where-Object { 
-                ($_.ConnectCmdletString -ne $null) -and
-                ($_.ConnectCmdletString -is [string]) -and
-                ($_.ConnectCmdletString.Trim().Length -gt 0)
-            }
-            if (-not $connectableModulesList) { 
-                Write-Warning "No modules are currently configured with a valid Connect command. Please check the script's module definitions."
-                Write-Host "Press any key to return to the main menu..."
-                $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-            } else {
-                                do {
-                    Show-ConnectServicesMenu -ConnectableModules $connectableModulesList
-                    $connectInput = Read-Host -Prompt "Select service to connect to, or [B] for back"
-                    if ($connectInput.ToUpper() -eq 'B') { break }
+                Write-Host
+                Write-Centered "${keyColor}A)$reset $textColor Install ALL missing modules$reset"
+                Write-Host
 
-                    if ($connectInput -match "^\d+$") {
-                        $connectSelectionIndex = [int]$connectInput - 1
-                        if ($connectSelectionIndex -ge 0 -and $connectSelectionIndex -lt $connectableModulesList.Count) {
-                            Invoke-ModuleConnect -ModuleToConnect $connectableModulesList[$connectSelectionIndex]
-                            Write-Host "Press any key to return to the Connect menu..."
-                            $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-                        } else {
-                            Write-Warning "Invalid selection number. Please choose from the listed options."
-                            Start-Sleep -Seconds 2
-                        }
-                    } else {
-                        Write-Warning "Invalid input. Please enter a number or 'B'."
-                        Start-Sleep -Seconds 2
+                $sel = Read-Host "$($KULLColors.Muted)Select an option, or press [Enter] to go back$($KULLColors.Reset)"
+
+                if ($sel -eq '') { break }
+                
+                if ($sel.ToUpper() -eq 'A') {
+                    foreach ($m in $missingModules) {
+                        Manage-Module -ModuleName $m.Name -Action Install
                     }
-                } while ($true)
-            }
-        }
-        "S" { 
-            Write-Host "Refreshing status..." -ForegroundColor Cyan 
-        }
-        "Q" {
-            Write-Host "Exiting script." -ForegroundColor Green
-            exit
-        }
-        default {
-            if ($userInput -match "^\d+$") {
-                $selectionIndex = [int]$userInput - 1
-                if ($selectionIndex -ge 0 -and $selectionIndex -lt $modules.Count) {
-                    $selectedModule = $modules[$selectionIndex]
-                    $installed = Get-Module -ListAvailable -Name $selectedModule.Name -ErrorAction SilentlyContinue
-                    if ($installed) {
-                        Manage-Module -ModuleName $selectedModule.Name -Action "Update"
-                    } else {
-                        Manage-Module -ModuleName $selectedModule.Name -Action "Install"
+                    Write-Centered "$($KULLColors.Success)All missing modules installed. Press any key to continue...$($KULLColors.Reset)"
+                    [void][System.Console]::ReadKey($true)
+                    break # Exit to main menu
+                } elseif ($sel -match '^\d+$' -and ($sel -as [int]) -ge 1 -and ($sel -as [int]) -le $missingModules.Count) {
+                    $moduleToInstall = $missingModules[($sel -as [int]) - 1]
+                    Manage-Module -ModuleName $moduleToInstall.Name -Action Install
+                    Write-Centered "$($KULLColors.Muted)Press any key to continue...$($KULLColors.Reset)"
+                    [void][System.Console]::ReadKey($true)
+                    # Refresh list in case we want to install another
+                    $missingModules = $modules | Where-Object { -not (Get-Module -ListAvailable -Name $_.Name -ErrorAction SilentlyContinue) }
+                    if ($missingModules.Count -eq 0) {
+                         Write-Centered "$($KULLColors.Success)All modules are now installed. Press any key to continue...$($KULLColors.Reset)"
+                         [void][System.Console]::ReadKey($true)
+                         break # Exit to main menu
                     }
                 } else {
-                    Write-Warning "Invalid selection number."
+                    Write-Centered "$($KULLColors.Failure)Invalid selection$($KULLColors.Reset)"; Start-Sleep 1
                 }
-            } else {
-                Write-Warning "Invalid input. Please enter a number or a menu letter."
+            } while ($true)
+        }
+        'U' {
+            [array]$installedModules = $modules | Where-Object { Get-Module -ListAvailable -Name $_.Name -ErrorAction SilentlyContinue }
+            if ($installedModules.Count -eq 0) {
+                Clear-Host
+                Show-Header
+                Write-Centered "$($KULLColors.Warning)No modules are installed to update.$($KULLColors.Reset)"; Start-Sleep 2
+                continue
             }
+            
+            do {
+                Clear-Host
+                Show-Header
+                Write-Host
+                $moduleDetails = foreach ($m in $installedModules) {
+                    $mod = Get-Module -ListAvailable -Name $m.Name | Sort-Object Version -Descending | Select-Object -First 1
+                    [pscustomobject]@{
+                        Name        = $m.Name
+                        Description = $m.Description
+                        Version     = $mod.Version
+                    }
+                }
+
+                Write-Centered "$($KULLColors.Header)--- Update Modules ---$($KULLColors.Reset)"
+                Write-Host
+                $keyColor = $KULLColors.MenuKey
+                $textColor = $KULLColors.MenuText
+                $versionColor = $KULLColors.Version
+                $reset = $KULLColors.Reset
+                for ($i = 0; $i -lt $moduleDetails.Count; $i++) {
+                    $detail = $moduleDetails[$i]
+                    $versionText = "$textColor(v$versionColor$($detail.Version)$textColor)$reset"
+                    Write-Centered "${keyColor}$($i + 1))$reset $textColor Update $($detail.Description) $versionText"
+                }
+                Write-Host
+                Write-Centered "${keyColor}A)$reset $textColor Update ALL installed modules$reset"
+                Write-Host
+
+                $sel = Read-Host "$($KULLColors.Muted)Select an option, or press [Enter] to go back$($KULLColors.Reset)"
+                
+                if ($sel -eq '') { break }
+
+                if ($sel.ToUpper() -eq 'A') {
+                    foreach ($m in $installedModules) {
+                        Manage-Module -ModuleName $m.Name -Action Update
+                    }
+                    Write-Centered "$($KULLColors.Success)All installed modules updated. Press any key to continue...$($KULLColors.Reset)"
+                    [void][System.Console]::ReadKey($true)
+                    break
+                } elseif ($sel -match '^\d+$' -and ($sel -as [int]) -ge 1 -and ($sel -as [int]) -le $installedModules.Count) {
+                    $moduleToUpdate = $installedModules[($sel -as [int]) - 1]
+                    Manage-Module -ModuleName $moduleToUpdate.Name -Action Update
+                    Write-Centered "$($KULLColors.Muted)Press any key to continue...$($KULLColors.Reset)"
+                    [void][System.Console]::ReadKey($true)
+                } else {
+                    Write-Centered "$($KULLColors.Failure)Invalid selection$($KULLColors.Reset)"; Start-Sleep 1
+                }
+            } while ($true)
+        }
+        'X' {
+            [array]$installedModules = $modules | Where-Object { Get-Module -ListAvailable -Name $_.Name -ErrorAction SilentlyContinue }
+            if ($installedModules.Count -eq 0) {
+                Clear-Host
+                Show-Header
+                Write-Centered "$($KULLColors.Warning)No modules are installed.$($KULLColors.Reset)"; Start-Sleep 2
+                continue
+            }
+            
+            do {
+                Clear-Host
+                Show-Header
+                Write-Host
+                $moduleDetails = foreach ($m in $installedModules) {
+                    $mod = Get-Module -ListAvailable -Name $m.Name | Sort-Object Version -Descending | Select-Object -First 1
+                    [pscustomobject]@{
+                        Name        = $m.Name
+                        Description = $m.Description
+                        Version     = $mod.Version
+                    }
+                }
+
+                Write-Centered "$($KULLColors.Header)--- Uninstall Modules ---$($KULLColors.Reset)"
+                Write-Host
+                $keyColor = $KULLColors.MenuKey
+                $textColor = $KULLColors.MenuText
+                $versionColor = $KULLColors.Version
+                $reset = $KULLColors.Reset
+                for ($i = 0; $i -lt $moduleDetails.Count; $i++) {
+                    $detail = $moduleDetails[$i]
+                    $versionText = "$textColor(v$versionColor$($detail.Version)$textColor)$reset"
+                    Write-Centered "${keyColor}$($i + 1))$reset $textColor Uninstall $($detail.Description) $versionText"
+                }
+                Write-Host
+                Write-Centered "${keyColor}A)$reset $textColor Uninstall ALL installed modules$reset"
+                Write-Host
+
+                $sel = Read-Host "$($KULLColors.Muted)Select an option, or press [Enter] to go back$($KULLColors.Reset)"
+                
+                if ($sel -eq '') { break }
+
+                if ($sel.ToUpper() -eq 'A') {
+                    $confirmPrompt = "$($KULLColors.Warning)ARE YOU SURE you want to uninstall ALL modules? This cannot be undone. (y/n)$($KULLColors.Reset)"
+                    $userInput = Read-Host $confirmPrompt
+                    if ($userInput -ne 'y') {
+                        Write-Centered "$($KULLColors.Warning)Operation cancelled.$($KULLColors.Reset)"; Start-Sleep 1
+                        continue
+                    }
+                    foreach ($m in $installedModules) {
+                        Manage-Module -ModuleName $m.Name -Action Uninstall
+                    }
+                    Write-Centered "$($KULLColors.Success)All installed modules uninstalled. Press any key to continue...$($KULLColors.Reset)"
+                    [void][System.Console]::ReadKey($true)
+                    break
+                } elseif ($sel -match '^\d+$' -and ($sel -as [int]) -ge 1 -and ($sel -as [int]) -le $installedModules.Count) {
+                    $moduleToUninstall = $installedModules[($sel -as [int]) - 1]
+                    Manage-Module -ModuleName $moduleToUninstall.Name -Action Uninstall
+                    Write-Centered "$($KULLColors.Muted)Press any key to continue...$($KULLColors.Reset)"
+                    [void][System.Console]::ReadKey($true)
+                    # Refresh the list of installed modules
+                    $installedModules = $modules | Where-Object { Get-Module -ListAvailable -Name $_.Name -ErrorAction SilentlyContinue }
+                    if ($installedModules.Count -eq 0) {
+                        Write-Centered "$($KULLColors.Success)All modules have been uninstalled.$($KULLColors.Reset)"; Start-Sleep 2
+                        break
+                    }
+                } else {
+                    Write-Centered "$($KULLColors.Failure)Invalid selection$($KULLColors.Reset)"; Start-Sleep 1
+                }
+            } while ($true)
+        }
+        'C' {
+            [array]$list = $modules | Where-Object ConnectCmdletString
+            if ($list.Count -eq 0) {
+                Clear-Host
+                Show-Header
+                Write-Centered "$($KULLColors.Warning)No connectable modules configured.$($KULLColors.Reset)"; Start-Sleep 2
+                continue
+            }
+
+            do {
+                Clear-Host
+                Show-Header
+                Write-Host
+                Write-Centered "$($KULLColors.Header)--- Connect to Services ---$($KULLColors.Reset)"
+                Write-Host
+                $keyColor = $KULLColors.MenuKey
+                $reset = $KULLColors.Reset
+
+                for ($i = 0; $i -lt $list.Count; $i++) {
+                    $module = $list[$i]
+                    $statusColor = $KULLColors.MenuText
+                    $statusText = ""
+
+                    if ($Global:AttemptedConnections.ContainsKey($module.Name)) {
+                        if ($Global:AttemptedConnections[$module.Name].Success) {
+                            $statusText = "$($KULLColors.Connected) (Connected)$reset"
+                        } else {
+                            $statusText = "$($KULLColors.FailedConnect) (Connection Failed)$reset"
+                        }
+                    }
+                    $menuText = "$($KULLColors.MenuText)Connect to $($module.Description)$statusText"
+                    Write-Centered "${keyColor}$($i + 1))$reset $menuText"
+                }
+                Write-Host
+
+                $sel = Read-Host "$($KULLColors.Muted)Select a service to connect to, or press [Enter] to go back$($KULLColors.Reset)"
+
+                if ($sel -eq '') { break }
+
+                if ($sel -match '^\d+$' -and ($sel -as [int]) -ge 1 -and ($sel -as [int]) -le $list.Count) {
+                    Invoke-ModuleConnect -ModuleToConnect $list[($sel - 1)]
+                    Write-Centered "$($KULLColors.Muted)Press any key to continue...$($KULLColors.Reset)"
+                    [void][System.Console]::ReadKey($true)
+                } else {
+                    Write-Centered "$($KULLColors.Failure)Invalid selection$($KULLColors.Reset)"; Start-Sleep 1
+                }
+            } while ($true)
+        }
+        'Q' {
+            Clear-Host
+            Write-Centered "$($KULLColors.Success)Goodbye!$($KULLColors.Reset)"
+            Start-Sleep 1
+            $exitLoop = $true
+        }
+        default {
         }
     }
-
-    if ($userInput.ToUpper() -ne "Q" -and $userInput.ToUpper() -ne "C") { 
-        Write-Host "Press any key to return to the menu..."
-        $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-    }
-
-} while ($true) 
+} while (-not $exitLoop)
