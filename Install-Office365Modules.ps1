@@ -108,6 +108,16 @@ function Show-ModuleStatus {
     Write-Host ''
 }
 
+function Get-LatestModuleVersion {
+    param([string]$ModuleName)
+    try {
+        $latest = Find-Module -Name $ModuleName -ErrorAction Stop | Select-Object -First 1
+        return $latest.Version
+    } catch {
+        return $null
+    }
+}
+
 function Manage-Module {
     param (
         [Parameter(Mandatory)] [string] $ModuleName,
@@ -124,8 +134,8 @@ function Manage-Module {
     Write-Centered "$($KULLColors.Warning)$presentVerb module '$ModuleName'...$($KULLColors.Reset)"
     try {
         switch ($Action) {
-            'Install'   { Install-Module -Name $ModuleName -Force -AllowClobber -Scope CurrentUser -ErrorAction Stop }
-            'Update'    { Update-Module -Name $ModuleName -Force -Scope CurrentUser -ErrorAction Stop }
+            'Install'   { Install-Module -Name $ModuleName -Force -AllowClobber -Scope AllUsers -ErrorAction Stop }
+            'Update'    { Update-Module -Name $ModuleName -Force -Scope AllUsers -ErrorAction Stop }
             'Uninstall' { Uninstall-Module -Name $ModuleName -Force -ErrorAction Stop }
         }
         Write-Centered "$($KULLColors.Success)Successfully $pastVerb '$ModuleName'.$($KULLColors.Reset)"
@@ -282,10 +292,12 @@ do {
                 Write-Host
                 $moduleDetails = foreach ($m in $installedModules) {
                     $mod = Get-Module -ListAvailable -Name $m.Name | Sort-Object Version -Descending | Select-Object -First 1
+                    $latest = Get-LatestModuleVersion -ModuleName $m.Name
                     [pscustomobject]@{
-                        Name        = $m.Name
-                        Description = $m.Description
-                        Version     = $mod.Version
+                        Name          = $m.Name
+                        Description   = $m.Description
+                        Version       = $mod.Version
+                        LatestVersion = $latest
                     }
                 }
 
@@ -297,7 +309,7 @@ do {
                 $reset = $KULLColors.Reset
                 for ($i = 0; $i -lt $moduleDetails.Count; $i++) {
                     $detail = $moduleDetails[$i]
-                    $versionText = "$textColor(v$versionColor$($detail.Version)$textColor)$reset"
+                    $versionText = "$textColor(installed v$versionColor$($detail.Version)$textColor,$reset $textColorlatest v$versionColor$($detail.LatestVersion)$textColor)$reset"
                     Write-Centered "${keyColor}$($i + 1))$reset $textColor Update $($detail.Description) $versionText"
                 }
                 Write-Host
