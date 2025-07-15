@@ -18,3 +18,7 @@ if (-not (Get-Module -ListAvailable -Name ExchangeOnlineManagement)) {
 
 This installs the module to `C:\Program Files\WindowsPowerShell\Modules`, which
 is shared across all PowerShell versions on the system.
+
+The update menu in the script now compares the installed and latest versions for
+each module, so you can quickly see whether an upgrade is available before
+choosing to update.

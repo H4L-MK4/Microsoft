@@ -131,6 +131,19 @@ function Manage-Module {
     $presentVerb = $actionVerbs[$Action].Present
     $pastVerb = $actionVerbs[$Action].Past
 
+    $installed = Get-Module -ListAvailable -Name $ModuleName | Sort-Object Version -Descending | Select-Object -First 1
+    $latest = Get-LatestModuleVersion -ModuleName $ModuleName
+
+    if ($Action -eq 'Install' -and $installed) {
+        Write-Centered "$($KULLColors.Success)'$ModuleName' is already installed (v$($installed.Version)).$($KULLColors.Reset)"
+        return
+    }
+
+    if ($Action -eq 'Update' -and $installed -and $latest -and $installed.Version -ge $latest) {
+        Write-Centered "$($KULLColors.Success)'$ModuleName' is already up to date (v$($installed.Version)).$($KULLColors.Reset)"
+        return
+    }
+
     Write-Centered "$($KULLColors.Warning)$presentVerb module '$ModuleName'...$($KULLColors.Reset)"
     try {
         switch ($Action) {
@@ -309,7 +322,7 @@ do {
                 $reset = $KULLColors.Reset
                 for ($i = 0; $i -lt $moduleDetails.Count; $i++) {
                     $detail = $moduleDetails[$i]
-                    $versionText = "$textColor(installed v$versionColor$($detail.Version)$textColor,$reset $textColorlatest v$versionColor$($detail.LatestVersion)$textColor)$reset"
+                    $versionText = "$textColor(installed v$versionColor$($detail.Version)$textColor,$reset $textColor latest v$versionColor$($detail.LatestVersion)$textColor)$reset"
                     Write-Centered "${keyColor}$($i + 1))$reset $textColor Update $($detail.Description) $versionText"
                 }
                 Write-Host
